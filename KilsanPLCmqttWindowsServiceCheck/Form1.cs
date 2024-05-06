@@ -9,11 +9,15 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.ServiceProcess;
+using Quartz;
+using Quartz.Impl;
+using System.Threading;
 
 namespace KilsanPLCmqttWindowsServiceCheck
 {
     public partial class Form1 : Form
     {
+        public static readonly NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
         public Form1()
         {
             InitializeComponent();
@@ -21,35 +25,60 @@ namespace KilsanPLCmqttWindowsServiceCheck
 
         private void Form1_Load(object sender, EventArgs e)
         {
-           
+            try
+            {
+                logger.Info(" BEGIN --- Form1_Load()");
+
+                Common.Logging.LogManager.Adapter = new Common.Logging.Simple.ConsoleOutLoggerFactoryAdapter { Level = Common.Logging.LogLevel.Info };
+                IScheduler scheduler = StdSchedulerFactory.GetDefaultScheduler();
+                scheduler.Start();
+
+                IJobDetail job = JobBuilder.Create<ServiceRestart>()
+                       .WithIdentity("job1", "group1")
+                       .Build();
+                ITrigger trigger = TriggerBuilder.Create()
+                    .WithIdentity("trigger1", "group1")
+                    .WithCronSchedule("59 45 * * * ?")
+                    .ForJob("job1", "group1")
+                    .Build();
+                scheduler.ScheduleJob(job, trigger);
+
+                //Thread.Sleep(TimeSpan.FromSeconds(60));
+            }
+            catch (SchedulerException se)
+            {
+                logger.Error(se, " Form1_Load()");
+            }
+        }
+
+        public class ServiceRestart : IJob
+        {
+            public void Execute(IJobExecutionContext context)
+            {
+                try
+                {
+                    RestartWindowsService("Kilsan PLC Service");
+                }
+                catch (Exception ex)
+                {
+                    logger.Error(ex, "");
+                }
+            }
         }
 
         private void btnPLC_Click(object sender, EventArgs e)
         {
             try
             {
-                //using (PowerShell PowerShellInstance = PowerShell.Create())
-                //{
-                //    // use "AddScript" to add the contents of a script file to the end of the execution pipeline.
-                //    // use "AddCommand" to add individual commands/cmdlets to the end of the execution pipeline.
-                //    PowerShellInstance.AddScript(@"Restart-Service -Name ''Kilsan PLC Service''");
-
-                //    //// use "AddParameter" to add a single parameter to the last command/script on the pipeline.
-                //    //PowerShellInstance.AddParameter("param1", "parameter 1 value!");
-                //}
-
-                //System.Diagnostics.Process.Start("net", "stop 'Kilsan PLC Service'").WaitForExit();
-                ////System.Diagnostics.Process.Start("net", "start ''Kilsan PLC Service''").WaitForExit();
-                
                 RestartWindowsService("Kilsan PLC Service");
             }
             catch (Exception ex)
             {
-
+                logger.Error(ex, "");
             }
         }
 
-        private void RestartWindowsService(string serviceName)
+        public static void RestartWindowsService(string serviceName)
         {
             ServiceController serviceController = new ServiceController(serviceName);
             try
@@ -64,37 +93,13 @@ namespace KilsanPLCmqttWindowsServiceCheck
             }
             catch (Exception ex)
             {
-                //ShowMsg(AppTexts.Information, AppTexts.SystematicError, MessageBox.Icon.WARNING);
+                logger.Error(ex, "");
             }
         }
 
-        //public static void RestartService(string serviceName, int timeoutMilliseconds)
-        //{
-        //    ServiceController service = new ServiceController(serviceName);
-        //    try
-        //    {
-        //        int millisec1 = Environment.TickCount;
-        //        TimeSpan timeout = TimeSpan.FromMilliseconds(timeoutMilliseconds);
-
-        //        service.Stop();
-        //        service.WaitForStatus(ServiceControllerStatus.Stopped, timeout);
-
-        //        // count the rest of the timeout
-        //        int millisec2 = Environment.TickCount;
-        //        timeout = TimeSpan.FromMilliseconds(timeoutMilliseconds - (millisec2 - millisec1));
-
-        //        service.Start();
-        //        service.WaitForStatus(ServiceControllerStatus.Running, timeout);
-        //    }
-        //    catch
-        //    {
-        //        // ...
-        //    }
-        //}
-
         private void btnNetsis_Click(object sender, EventArgs e)
         {
-
+            RestartWindowsService("Kilsan Netsis Service");
         }
 
         private void Form1_Resize(object sender, EventArgs e)
